@@ -1,0 +1,46 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+    volumes:
+      - ./data:/data
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, sys; resp = urllib.request.urlopen('http://localhost:8000/health'); sys.exit(0 if resp.getcode() == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  data-producer:
+    build: ./backend
+    depends_on:
+      - redis
+      - backend
+    environment:
+      - REDIS_HOST=redis
+    volumes:
+      - ./data:/data
+    command: python generate_transactions.py --rate 100
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - REACT_APP_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
