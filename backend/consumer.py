@@ -27,6 +27,7 @@ _processed_count = 0
 _started = False
 STREAM_MAXLEN = 20000
 DB_RETRY_BACKOFF_SECONDS = 0.05
+DB_MAX_RETRIES = 3
 
 
 def combine(ml_score: float, rule_score: float) -> tuple[float, str]:
@@ -248,37 +249,56 @@ def _consume_forever() -> None:
                     client.xack(stream_name, GROUP_NAME, message_id)
                     continue
 
+                should_ack = False
                 try:
                     tx = json.loads(data)
-                    feature_vector, features_dict = _model.extract_features(tx)
-
-                    if not _model.trained and len(_train_buffer) < 1000:
-                        _train_buffer.append(feature_vector)
-                        if len(_train_buffer) == 1000:
-                            _model.fit(np.array(_train_buffer))
-                    elif _model.trained:
-                        _retrain_buffer.append(feature_vector)
-
-                    ml_score = _model.score(feature_vector)
-                    rule_score, triggered_rules = _rules.evaluate(features_dict)
-                    final_score, status = combine(ml_score, rule_score)
-
-                    save_recent_transaction(tx, status, final_score)
-                    save_outcome(tx, status)
-                    save_alert(tx, ml_score, rule_score, final_score, status, triggered_rules)
-                    _model.update_state(tx)
-
-                    _processed_count += 1
-                    if _model.trained and _processed_count % 10000 == 0 and _retrain_buffer:
-                        _model.fit(np.array(_retrain_buffer[-10000:]))
                 except json.JSONDecodeError as exc:
-                    print(f"Failed to decode JSON for message {message_id}: {exc}")
-                except sqlite3.OperationalError as exc:
-                    print(f"SQLite write error for message {message_id}: {exc}")
-                    time.sleep(DB_RETRY_BACKOFF_SECONDS)
-                except Exception as exc:
-                    print(f"Failed to process message {message_id}: {exc}")
-                finally:
+                    print(
+                        f"Failed to decode JSON for message {message_id}: {exc}; raw={data[:200]}"
+                    )
+                    should_ack = True
+                    tx = None
+
+                if tx is not None:
+                    for attempt in range(1, DB_MAX_RETRIES + 1):
+                        try:
+                            feature_vector, features_dict = _model.extract_features(tx)
+
+                            if not _model.trained and len(_train_buffer) < 1000:
+                                _train_buffer.append(feature_vector)
+                                if len(_train_buffer) == 1000:
+                                    _model.fit(np.array(_train_buffer))
+                            elif _model.trained:
+                                _retrain_buffer.append(feature_vector)
+
+                            ml_score = _model.score(feature_vector)
+                            rule_score, triggered_rules = _rules.evaluate(features_dict)
+                            final_score, status = combine(ml_score, rule_score)
+
+                            save_recent_transaction(tx, status, final_score)
+                            save_outcome(tx, status)
+                            save_alert(tx, ml_score, rule_score, final_score, status, triggered_rules)
+                            _model.update_state(tx)
+
+                            _processed_count += 1
+                            if _model.trained and _processed_count % 10000 == 0 and _retrain_buffer:
+                                _model.fit(np.array(_retrain_buffer[-10000:]))
+                            should_ack = True
+                            break
+                        except sqlite3.OperationalError as exc:
+                            print(
+                                f"SQLite write error for message {message_id} attempt {attempt}/{DB_MAX_RETRIES}: {exc}"
+                            )
+                            if attempt < DB_MAX_RETRIES:
+                                time.sleep(DB_RETRY_BACKOFF_SECONDS)
+                            else:
+                                print(f"Exceeded retries for message {message_id}; leaving unacked")
+                        except Exception as exc:
+                            print(f"Failed to process message {message_id}: {exc}")
+                            should_ack = True
+                            break
+
+                if should_ack:
                     client.xack(stream_name, GROUP_NAME, message_id)
 
 
