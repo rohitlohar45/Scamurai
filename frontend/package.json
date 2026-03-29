@@ -7,13 +7,12 @@
     "chart.js": "^4.4.3",
     "react": "^18.3.0",
     "react-chartjs-2": "^5.2.0",
-    "react-dom": "^18.3.0"
-  },
-  "devDependencies": {
+    "react-dom": "^18.3.0",
+    "react-scripts": "^5.0.1",
     "serve": "^14.2.3"
   },
   "scripts": {
-    "start": "serve -s build -l 3000",
-    "build": "echo \"No build step configured\" && mkdir -p build && cp -r src/* build/ || true"
+    "start": "react-scripts start",
+    "build": "react-scripts build"
   }
 }
