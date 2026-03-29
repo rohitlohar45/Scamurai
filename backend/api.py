@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 
@@ -10,10 +11,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from consumer import DB_PATH, get_processed_count, inject_fraud, run_consumer
 
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+ALLOWED_ORIGINS = (
+    [origin.strip() for origin in _allowed_origins_env.split(",") if origin.strip()]
+    if _allowed_origins_env
+    else ["http://localhost:3000"]
+)
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -22,7 +30,8 @@ STARTED_AT = datetime.now(timezone.utc)
 
 
 def _db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -62,7 +71,12 @@ def stats() -> dict:
         "SELECT COALESCE(SUM(amount), 0) FROM fraud_cases"
     ).fetchone()[0]
 
-    rule_rows = conn.execute("SELECT rules_triggered FROM fraud_cases").fetchall()
+    rule_rows = conn.execute(
+        """
+        SELECT rules_triggered FROM fraud_cases
+        WHERE created_at >= datetime('now', '-1 hour')
+        """
+    ).fetchall()
     signal_breakdown: dict[str, int] = {}
     for row in rule_rows:
         for rule in json.loads(row["rules_triggered"] or "[]"):
@@ -80,21 +94,21 @@ def stats() -> dict:
     for row in alert_rows:
         created = datetime.fromisoformat(row["created_at"].replace(" ", "T") + "+00:00")
         age = (now - created).total_seconds()
-        if 0 <= age <= 60:
-            bucket_index = int((60 - age) // 3)
+        if 0 <= age < 60:
+            bucket_index = int(age // 3)
             if 0 <= bucket_index < 20:
                 buckets[bucket_index] += 1
 
     tp = conn.execute(
-        "SELECT COUNT(*) FROM fraud_cases WHERE status='FRAUD' AND is_fraud_gt=1"
+        "SELECT COUNT(*) FROM transaction_outcomes WHERE status='FRAUD' AND is_fraud_gt=1"
     ).fetchone()[0]
     fp = conn.execute(
-        "SELECT COUNT(*) FROM fraud_cases WHERE status='FRAUD' AND is_fraud_gt=0"
+        "SELECT COUNT(*) FROM transaction_outcomes WHERE status='FRAUD' AND is_fraud_gt=0"
     ).fetchone()[0]
 
     fn = conn.execute(
         """
-        SELECT COUNT(*) FROM fraud_cases
+        SELECT COUNT(*) FROM transaction_outcomes
         WHERE is_fraud_gt=1 AND status!='FRAUD'
         """
     ).fetchone()[0]

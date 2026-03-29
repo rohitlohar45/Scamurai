@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import time
 from datetime import datetime, timezone
 
@@ -11,7 +12,12 @@ STREAM_MAXLEN = 20000
 
 
 def replay(rate: float = 100.0) -> None:
-    client = redis.Redis(host="redis", port=6379, decode_responses=True)
+    redis_host = os.getenv("REDIS_HOST", "redis")
+    try:
+        redis_port = int(os.getenv("REDIS_PORT", "6379"))
+    except ValueError:
+        redis_port = 6379
+    client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
     dataframe = pd.read_csv("/data/paysim_sample.csv")
 
     for idx, row in dataframe.iterrows():

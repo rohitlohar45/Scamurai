@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 from sklearn.ensemble import IsolationForest
@@ -37,7 +37,7 @@ class FraudModel:
         old_balance = float(tx.get("old_balance", 0.0))
         new_balance = float(tx.get("new_balance", 0.0))
         tx_type = tx.get("tx_type", "")
-        timestamp = tx.get("timestamp", datetime.utcnow().isoformat())
+        timestamp = tx.get("timestamp", datetime.now(timezone.utc).isoformat())
         injected_fraud_type = tx.get("injected_fraud_type")
 
         history = self.user_amounts[user_id]
@@ -83,7 +83,7 @@ class FraudModel:
     def update_state(self, tx: dict) -> None:
         user_id = tx.get("user_id", "unknown")
         amount = float(tx.get("amount", 0.0))
-        timestamp = tx.get("timestamp", datetime.utcnow().isoformat())
+        timestamp = tx.get("timestamp", datetime.now(timezone.utc).isoformat())
         current_ts = self._timestamp_seconds(timestamp)
 
         self.user_amounts[user_id].append(amount)

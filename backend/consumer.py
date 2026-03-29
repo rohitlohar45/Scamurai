@@ -4,6 +4,7 @@ import json
 import os
 import random
 import sqlite3
+import time
 from datetime import datetime, timezone
 
 import numpy as np
@@ -39,7 +40,9 @@ def combine(ml_score: float, rule_score: float) -> tuple[float, str]:
 
 
 def get_db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -78,6 +81,15 @@ def init_db() -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS transaction_outcomes (
+            tx_id       TEXT PRIMARY KEY,
+            status      TEXT,
+            is_fraud_gt INTEGER
+        )
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -107,6 +119,24 @@ def save_recent_transaction(tx: dict, status: str, final_score: float) -> None:
             SELECT tx_id FROM transactions_recent ORDER BY timestamp DESC LIMIT 20
         )
         """
+    )
+    conn.commit()
+    conn.close()
+
+
+def save_outcome(tx: dict, status: str) -> None:
+    conn = get_db_connection()
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO transaction_outcomes
+            (tx_id, status, is_fraud_gt)
+        VALUES (?, ?, ?)
+        """,
+        (
+            tx.get("tx_id"),
+            status,
+            int(tx.get("is_fraud_gt", 0)),
+        ),
     )
     conn.commit()
     conn.close()
@@ -217,29 +247,38 @@ def _consume_forever() -> None:
                     client.xack(stream_name, GROUP_NAME, message_id)
                     continue
 
-                tx = json.loads(data)
-                feature_vector, features_dict = _model.extract_features(tx)
+                try:
+                    tx = json.loads(data)
+                    feature_vector, features_dict = _model.extract_features(tx)
 
-                if not _model.trained and len(_train_buffer) < 1000:
-                    _train_buffer.append(feature_vector)
-                    if len(_train_buffer) == 1000:
-                        _model.fit(np.array(_train_buffer))
-                elif _model.trained:
-                    _retrain_buffer.append(feature_vector)
+                    if not _model.trained and len(_train_buffer) < 1000:
+                        _train_buffer.append(feature_vector)
+                        if len(_train_buffer) == 1000:
+                            _model.fit(np.array(_train_buffer))
+                    elif _model.trained:
+                        _retrain_buffer.append(feature_vector)
 
-                ml_score = _model.score(feature_vector)
-                rule_score, triggered_rules = _rules.evaluate(features_dict)
-                final_score, status = combine(ml_score, rule_score)
+                    ml_score = _model.score(feature_vector)
+                    rule_score, triggered_rules = _rules.evaluate(features_dict)
+                    final_score, status = combine(ml_score, rule_score)
 
-                save_recent_transaction(tx, status, final_score)
-                save_alert(tx, ml_score, rule_score, final_score, status, triggered_rules)
-                _model.update_state(tx)
+                    save_recent_transaction(tx, status, final_score)
+                    save_outcome(tx, status)
+                    save_alert(tx, ml_score, rule_score, final_score, status, triggered_rules)
+                    _model.update_state(tx)
 
-                _processed_count += 1
-                if _model.trained and _processed_count % 10000 == 0 and _retrain_buffer:
-                    _model.fit(np.array(_retrain_buffer[-10000:]))
-
-                client.xack(stream_name, GROUP_NAME, message_id)
+                    _processed_count += 1
+                    if _model.trained and _processed_count % 10000 == 0 and _retrain_buffer:
+                        _model.fit(np.array(_retrain_buffer[-10000:]))
+                except json.JSONDecodeError as exc:
+                    print(f"Failed to decode JSON for message {message_id}: {exc}")
+                except sqlite3.OperationalError as exc:
+                    print(f"SQLite write error for message {message_id}: {exc}")
+                    time.sleep(0.05)
+                except Exception as exc:
+                    print(f"Failed to process message {message_id}: {exc}")
+                finally:
+                    client.xack(stream_name, GROUP_NAME, message_id)
 
 
 async def run_consumer() -> None:

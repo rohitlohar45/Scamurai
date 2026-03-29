@@ -15,19 +15,34 @@ export default function App() {
   const [liveNow, setLiveNow] = useState(Date.now());
 
   useEffect(() => {
+    let isFetching = false;
+    let isCancelled = false;
+
     const fetchAll = async () => {
-      const [s, t] = await Promise.all([api.getStats(), api.getTransactions()]);
-      setStats(s);
-      setTransactions(t);
-      setRateSamples((prev) => {
-        const next = [...prev, { ts: Date.now(), total: s?.total_count ?? 0 }];
-        return next.slice(-30);
-      });
+      if (isFetching || isCancelled) return;
+      isFetching = true;
+      try {
+        const [s, t] = await Promise.all([api.getStats(), api.getTransactions()]);
+        if (isCancelled) return;
+        setStats(s);
+        setTransactions(t);
+        setRateSamples((prev) => {
+          const next = [...prev, { ts: Date.now(), total: s?.total_count ?? 0 }];
+          return next.slice(-30);
+        });
+      } catch (error) {
+        console.error("Failed to fetch stats or transactions", error);
+      } finally {
+        isFetching = false;
+      }
     };
 
     fetchAll();
     const id = setInterval(fetchAll, 1000);
-    return () => clearInterval(id);
+    return () => {
+      isCancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   useEffect(() => {
