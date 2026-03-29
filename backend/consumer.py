@@ -71,6 +71,9 @@ def init_db() -> None:
         """
     )
     conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fraud_cases_created_at ON fraud_cases(created_at)"
+    )
+    conn.execute(
         """
         CREATE TABLE IF NOT EXISTS transactions_recent (
             tx_id       TEXT PRIMARY KEY,
@@ -253,10 +256,7 @@ def _consume_forever() -> None:
                 try:
                     tx = json.loads(data)
                 except json.JSONDecodeError as exc:
-                    data_preview = data[:200] if isinstance(data, str) else str(data)
-                    print(
-                        f"Failed to decode JSON for message {message_id}: {exc}; raw={data_preview}"
-                    )
+                    print(f"Failed to decode JSON for message {message_id}: {exc}")
                     should_ack = True
                     tx = None
 
@@ -291,7 +291,8 @@ def _consume_forever() -> None:
                                 f"SQLite write error for message {message_id} attempt {attempt}/{DB_MAX_RETRIES}: {exc}"
                             )
                             if attempt < DB_MAX_RETRIES:
-                                time.sleep(DB_RETRY_BACKOFF_SECONDS)
+                                backoff = DB_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1))
+                                time.sleep(backoff)
                             else:
                                 print(f"Exceeded retries for message {message_id}; leaving unacked")
                         except Exception as exc:
