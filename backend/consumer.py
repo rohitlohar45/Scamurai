@@ -253,8 +253,9 @@ def _consume_forever() -> None:
                 try:
                     tx = json.loads(data)
                 except json.JSONDecodeError as exc:
+                    data_preview = data[:200] if isinstance(data, str) else str(data)
                     print(
-                        f"Failed to decode JSON for message {message_id}: {exc}; raw={data[:200]}"
+                        f"Failed to decode JSON for message {message_id}: {exc}; raw={data_preview}"
                     )
                     should_ack = True
                     tx = None

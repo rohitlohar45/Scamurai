@@ -94,8 +94,9 @@ def stats() -> dict:
     for row in alert_rows:
         created = datetime.fromisoformat(row["created_at"].replace(" ", "T") + "+00:00")
         age = (now - created).total_seconds()
-        # Buckets represent alert age windows [0..3), [3..6), ..., [57..60) seconds,
-        # so frontend labels ("0s", "3s", ...) align directly with age bucket start.
+        # Buckets represent alert age windows [0..3), [3..6), ..., [57..60) seconds;
+        # alerts at age >= 60s are excluded. Frontend labels ("0s", "3s", ...)
+        # align directly with each bucket start.
         if 0 <= age < 60:
             bucket_index = int(age // 3)
             if 0 <= bucket_index < 20:
