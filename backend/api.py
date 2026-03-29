@@ -94,6 +94,8 @@ def stats() -> dict:
     for row in alert_rows:
         created = datetime.fromisoformat(row["created_at"].replace(" ", "T") + "+00:00")
         age = (now - created).total_seconds()
+        # Buckets are 0-3s, 3-6s, ..., 57-60s ago so the frontend x-axis
+        # labels ("0s", "3s", ...) map directly to alert age.
         if 0 <= age < 60:
             bucket_index = int(age // 3)
             if 0 <= bucket_index < 20:

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import api from "./api";
 import InjectButton from "./components/InjectButton";
@@ -13,17 +13,18 @@ export default function App() {
   const [flashTxId, setFlashTxId] = useState(null);
   const [rateSamples, setRateSamples] = useState([]);
   const [liveNow, setLiveNow] = useState(Date.now());
+  const isFetchingRef = useRef(false);
+  const isCancelledRef = useRef(false);
 
   useEffect(() => {
-    let isFetching = false;
-    let isCancelled = false;
+    isCancelledRef.current = false;
 
     const fetchAll = async () => {
-      if (isFetching || isCancelled) return;
-      isFetching = true;
+      if (isFetchingRef.current || isCancelledRef.current) return;
+      isFetchingRef.current = true;
       try {
         const [s, t] = await Promise.all([api.getStats(), api.getTransactions()]);
-        if (isCancelled) return;
+        if (isCancelledRef.current) return;
         setStats(s);
         setTransactions(t);
         setRateSamples((prev) => {
@@ -33,14 +34,14 @@ export default function App() {
       } catch (error) {
         console.error("Failed to fetch stats or transactions", error);
       } finally {
-        isFetching = false;
+        isFetchingRef.current = false;
       }
     };
 
     fetchAll();
     const id = setInterval(fetchAll, 1000);
     return () => {
-      isCancelled = true;
+      isCancelledRef.current = true;
       clearInterval(id);
     };
   }, []);

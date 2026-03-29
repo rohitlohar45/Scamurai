@@ -26,6 +26,7 @@ _retrain_buffer: list[list[float]] = []
 _processed_count = 0
 _started = False
 STREAM_MAXLEN = 20000
+DB_RETRY_BACKOFF_SECONDS = 0.05
 
 
 def combine(ml_score: float, rule_score: float) -> tuple[float, str]:
@@ -274,7 +275,7 @@ def _consume_forever() -> None:
                     print(f"Failed to decode JSON for message {message_id}: {exc}")
                 except sqlite3.OperationalError as exc:
                     print(f"SQLite write error for message {message_id}: {exc}")
-                    time.sleep(0.05)
+                    time.sleep(DB_RETRY_BACKOFF_SECONDS)
                 except Exception as exc:
                     print(f"Failed to process message {message_id}: {exc}")
                 finally:
