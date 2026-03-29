@@ -32,7 +32,7 @@ services:
       - REDIS_HOST=redis
     volumes:
       - ./data:/data
-    command: python generate_transactions.py --rate 2
+    command: python generate_transactions.py --rate 100
     restart: on-failure
 
   frontend:

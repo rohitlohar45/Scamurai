@@ -7,7 +7,10 @@ import pandas as pd
 import redis
 
 
-def replay(rate: float = 1.0) -> None:
+STREAM_MAXLEN = 20000
+
+
+def replay(rate: float = 100.0) -> None:
     client = redis.Redis(host="redis", port=6379, decode_responses=True)
     dataframe = pd.read_csv("/data/paysim_sample.csv")
 
@@ -24,7 +27,7 @@ def replay(rate: float = 1.0) -> None:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "injected_fraud_type": None,
         }
-        client.xadd("transactions", {"data": json.dumps(transaction)}, maxlen=2000)
+        client.xadd("transactions", {"data": json.dumps(transaction)}, maxlen=STREAM_MAXLEN)
         time.sleep(1.0 / rate)
 
 
@@ -33,8 +36,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--rate",
         type=float,
-        default=1.0,
-        help="Transactions per second (default: 1)",
+        default=100.0,
+        help="Transactions per second (default: 100)",
     )
     args = parser.parse_args()
     replay(rate=args.rate)

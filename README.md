@@ -1,6 +1,7 @@
 # Scamurai — Real-time Fraud Detection Engine
 
 Real-time fraud detection MVP using Redis Streams, FastAPI, IsolationForest + rules, SQLite, and a React dashboard.
+Default demo mode is tuned to **6,000 tx/min (100 tx/sec)**.
 
 ## Prerequisites
 
@@ -21,6 +22,27 @@ docker-compose up --build
 
 Dashboard: http://localhost:3000  
 Backend API: http://localhost:8000
+
+To run at 6k tx/min explicitly:
+
+```bash
+docker-compose run --rm data-producer python generate_transactions.py --rate 100
+```
+
+## Why Scamurai is different
+
+- Hybrid scoring (ML + explicit fraud rules) improves both detection and explainability.
+- Real-time streaming architecture with live dashboard for immediate operational decisions.
+- Every flag can be interpreted through rule signals (not a black-box-only score).
+
+## Why fraud injection exists (for judges)
+
+`POST /inject-fraud` creates deterministic high-risk transactions so demos are repeatable.
+Judges can verify that:
+
+1. detection fires in real time,
+2. expected signals are triggered,
+3. alerts flow through API + dashboard end-to-end.
 
 ## Architecture
 

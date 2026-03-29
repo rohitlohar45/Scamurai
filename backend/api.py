@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from consumer import DB_PATH, inject_fraud, run_consumer
+from consumer import DB_PATH, get_processed_count, inject_fraud, run_consumer
 
 app = FastAPI()
 app.add_middleware(
@@ -51,7 +51,7 @@ def transactions_recent() -> dict:
 def stats() -> dict:
     conn = _db()
 
-    total_count = conn.execute("SELECT COUNT(*) FROM transactions_recent").fetchone()[0]
+    total_count = get_processed_count()
     fraud_count = conn.execute(
         "SELECT COUNT(*) FROM fraud_cases WHERE status = 'FRAUD'"
     ).fetchone()[0]

@@ -24,6 +24,7 @@ _train_buffer: list[list[float]] = []
 _retrain_buffer: list[list[float]] = []
 _processed_count = 0
 _started = False
+STREAM_MAXLEN = 20000
 
 
 def combine(ml_score: float, rule_score: float) -> tuple[float, str]:
@@ -173,8 +174,12 @@ def inject_fraud() -> dict:
     host = os.getenv("REDIS_HOST", "redis")
     client = redis.Redis(host=host, port=6379, decode_responses=True)
     tx = create_injected_fraud_transaction()
-    client.xadd(STREAM_NAME, {"data": json.dumps(tx)}, maxlen=2000)
+    client.xadd(STREAM_NAME, {"data": json.dumps(tx)}, maxlen=STREAM_MAXLEN)
     return tx
+
+
+def get_processed_count() -> int:
+    return _processed_count
 
 
 def _consume_forever() -> None:
