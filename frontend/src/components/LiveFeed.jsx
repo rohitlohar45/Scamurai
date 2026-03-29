@@ -45,7 +45,7 @@ export default function LiveFeed({ transactions, flashTxId, liveNow }) {
           <tr style={{ color: "#94a3b8", fontSize: 12, textAlign: "left" }}>
             <th style={{ paddingBottom: 8 }}>tx_id</th>
             <th style={{ paddingBottom: 8 }}>tx_type</th>
-            <th style={{ textAlign: "right", paddingBottom: 8 }}>amount</th>
+            <th style={{  paddingBottom: 8 }}>amount</th>
             <th style={{ paddingBottom: 8 }}>time ago</th>
             <th style={{ paddingBottom: 8 }}>status</th>
           </tr>
