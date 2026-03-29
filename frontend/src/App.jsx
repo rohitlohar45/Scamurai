@@ -24,7 +24,7 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  const txPerMinute = useMemo(() => {
+  const totalTxCount = useMemo(() => {
     if (!stats?.total_count) return 0;
     return Math.round(stats.total_count);
   }, [stats]);
@@ -47,7 +47,7 @@ export default function App() {
         <h1 style={{ margin: 0 }}>Scamurai · Real-time Fraud Detection</h1>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ color: "#86efac" }}>● LIVE</span>
-          <span style={{ color: "#9ca3af" }}>{txPerMinute.toLocaleString("en-IN")} tx/min</span>
+          <span style={{ color: "#9ca3af" }}>{totalTxCount.toLocaleString("en-IN")} tx/min</span>
           <InjectButton onInjected={onInjected} />
         </div>
       </header>
